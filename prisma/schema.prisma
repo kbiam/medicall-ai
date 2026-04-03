@@ -1,0 +1,82 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Doctor {
+  id        String   @id @default(cuid())
+  name      String
+  specialty String
+  createdAt DateTime @default(now())
+
+  slots        Slot[]
+  appointments Appointment[]
+}
+
+model Patient {
+  id          String   @id @default(cuid())
+  name        String
+  phone       String   @unique
+  email       String?
+  dateOfBirth String?
+  createdAt   DateTime @default(now())
+
+  appointments Appointment[]
+  callLogs     CallLog[]
+}
+
+model Slot {
+  id        String   @id @default(cuid())
+  doctorId  String
+  date      String
+  startTime String
+  endTime   String
+  isBooked  Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  doctor      Doctor       @relation(fields: [doctorId], references: [id])
+  appointment Appointment?
+}
+
+model Appointment {
+  id        String   @id @default(cuid())
+  patientId String
+  doctorId  String
+  slotId    String   @unique
+  date      String
+  startTime String
+  endTime   String
+  status    String   @default("scheduled")
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  patient  Patient   @relation(fields: [patientId], references: [id])
+  doctor   Doctor    @relation(fields: [doctorId], references: [id])
+  slot     Slot      @relation(fields: [slotId], references: [id])
+  callLogs CallLog[]
+}
+
+model CallLog {
+  id            String   @id @default(cuid())
+  executionId   String?  @unique
+  patientId     String?
+  appointmentId String?
+  callType      String
+  status        String
+  transcript    String?
+  extractedData String?
+  summary       String?
+  duration      Float?
+  cost          Float?
+  recordingUrl  String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  patient     Patient?     @relation(fields: [patientId], references: [id])
+  appointment Appointment? @relation(fields: [appointmentId], references: [id])
+}

@@ -1,0 +1,150 @@
+{
+  "agent_config": {
+    "agent_name": "MediCall Reminder Agent",
+    "agent_welcome_message": "Hello {patient_name}! This is Medi from MediCall Healthcare. I'm calling to remind you about your upcoming appointment with {doctor_name} on {appointment_date} at {appointment_time}. Can you confirm you'll be able to make it?",
+    "agent_type": "other",
+    "webhook_url": "YOUR_NGROK_URL/api/webhook/bolna",
+    "tasks": [
+      {
+        "task_type": "conversation",
+        "toolchain": {
+          "execution": "parallel",
+          "pipelines": [["transcriber", "llm", "synthesizer"]]
+        },
+        "tools_config": {
+          "llm_agent": {
+            "provider": "openai",
+            "model": "gpt-4o-mini",
+            "temperature": 0.3,
+            "max_tokens": 150,
+            "agent_type": "simple_llm_agent"
+          },
+          "synthesizer": {
+            "provider": "polly",
+            "voice": "Polly.Aditi",
+            "buffer_size": 100,
+            "speed_rate": 1.0
+          },
+          "transcriber": {
+            "provider": "deepgram",
+            "model": "nova-3"
+          },
+          "input": {
+            "provider": "twilio",
+            "format": "wav"
+          },
+          "output": {
+            "provider": "twilio",
+            "format": "wav"
+          }
+        },
+        "task_config": {
+          "hangup_after_silence": 10,
+          "hangup_after_LLMCall": false
+        }
+      },
+      {
+        "task_type": "extraction",
+        "tools_config": {
+          "llm_agent": {
+            "provider": "openai",
+            "model": "gpt-4o-mini"
+          }
+        },
+        "task_config": {
+          "extraction_details": {
+            "appointment_action": {
+              "description": "What did the patient decide about their appointment",
+              "type": "string",
+              "choices": ["confirmed", "cancelled", "rescheduled", "no_response"]
+            },
+            "appointment_id": {
+              "description": "The appointment ID being discussed",
+              "type": "string"
+            },
+            "patient_sentiment": {
+              "description": "Overall sentiment of the patient during the call",
+              "type": "string",
+              "choices": ["positive", "neutral", "negative"]
+            }
+          }
+        }
+      }
+    ]
+  },
+  "agent_prompts": {
+    "task_1": {
+      "system_prompt": "## Personality\nYou are Medi, a friendly and professional appointment reminder assistant at MediCall Healthcare. You are warm, concise, and respectful of the patient's time.\n\n## Context\nYou are making an outbound reminder call to a patient about their upcoming appointment.\n\nAppointment details:\n- Patient: {patient_name}\n- Doctor: {doctor_name} ({doctor_specialty})\n- Date: {appointment_date}\n- Time: {appointment_time}\n- Appointment ID: {appointment_id}\n\n## Instructions\n1. Introduce yourself and state the purpose — reminding about their appointment\n2. Share the appointment details (doctor, date, time)\n3. Ask if they can confirm their attendance\n4. Based on their response:\n   - If CONFIRMING: Thank them, remind them to arrive 10 minutes early\n   - If CANCELLING: Express understanding, ask if they'd like to reschedule, use cancel_appointment function\n   - If RESCHEDULING: Use check_available_slots to find new times, then book_appointment\n5. Thank them and end the call\n\n## Guardrails\n- Keep the call brief (under 2 minutes ideally)\n- Don't provide medical advice\n- Be understanding if they need to cancel\n- If they don't answer clearly, ask once more then note as 'no_response'\n- Always be polite and professional"
+    }
+  },
+  "_function_tools": [
+    {
+      "name": "cancel_appointment",
+      "description": "Cancel the patient's appointment",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "appointment_id": {
+            "type": "string",
+            "description": "The appointment ID to cancel"
+          }
+        },
+        "required": ["appointment_id"]
+      },
+      "api": {
+        "method": "PATCH",
+        "url": "YOUR_NGROK_URL/api/appointments",
+        "body_mapping": {
+          "appointment_id": "appointment_id",
+          "status": "cancelled"
+        }
+      }
+    },
+    {
+      "name": "check_available_slots",
+      "description": "Check available slots for rescheduling",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "specialty": {
+            "type": "string",
+            "description": "Doctor's specialty"
+          }
+        }
+      },
+      "api": {
+        "method": "GET",
+        "url": "YOUR_NGROK_URL/api/slots",
+        "param_mapping": {
+          "specialty": "specialty"
+        }
+      }
+    },
+    {
+      "name": "book_appointment",
+      "description": "Book a new appointment (for rescheduling)",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "slot_id": {
+            "type": "string",
+            "description": "The slot ID to book"
+          },
+          "patient_phone": {
+            "type": "string",
+            "description": "Patient phone number"
+          }
+        },
+        "required": ["slot_id"]
+      },
+      "api": {
+        "method": "POST",
+        "url": "YOUR_NGROK_URL/api/appointments",
+        "body_mapping": {
+          "slot_id": "slot_id",
+          "patient_phone": "patient_phone"
+        }
+      }
+    }
+  ]
+}

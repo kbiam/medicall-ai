@@ -4,12 +4,19 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "prisma generate && prisma migrate deploy && npx tsx prisma/seed.ts && next build",
+    "postinstall": "prisma generate",
     "start": "next start",
     "lint": "eslint"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.82.0",
+    "@prisma/client": "^5.22.0",
+    "date-fns": "^4.1.0",
+    "lucide-react": "^1.7.0",
     "next": "16.2.2",
+    "openai": "^6.33.0",
+    "prisma": "^5.22.0",
     "react": "19.2.4",
     "react-dom": "19.2.4"
   },
