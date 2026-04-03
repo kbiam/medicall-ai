@@ -119,8 +119,11 @@ export async function cancelAppointment(appointmentId: string) {
   if (!appt) return { success: false, error: "Appointment not found" };
 
   await prisma.$transaction([
-    prisma.appointment.delete({ where: { id: appointmentId } }),
-    prisma.slot.update({ where: { id: appt.slotId }, data: { isBooked: false } }),
+    prisma.appointment.update({
+      where: { id: appointmentId },
+      data: { status: "cancelled", slotId: null },
+    }),
+    prisma.slot.update({ where: { id: appt.slotId! }, data: { isBooked: false } }),
   ]);
 
   return { success: true, message: "Appointment cancelled" };

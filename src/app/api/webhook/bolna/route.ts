@@ -72,11 +72,14 @@ export async function POST(req: NextRequest) {
         data: { status: "confirmed" },
       }).catch(() => {}); // Ignore if appointment not found
     } else if (action === "cancelled" && appointmentId) {
-      const appt = await prisma.appointment.update({
+      const appt = await prisma.appointment.findUnique({
         where: { id: appointmentId },
-        data: { status: "cancelled" },
       }).catch(() => null);
-      if (appt) {
+      if (appt && appt.slotId) {
+        await prisma.appointment.update({
+          where: { id: appointmentId },
+          data: { status: "cancelled", slotId: null },
+        });
         await prisma.slot.update({
           where: { id: appt.slotId },
           data: { isBooked: false },

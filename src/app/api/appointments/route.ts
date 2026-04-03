@@ -129,9 +129,12 @@ export async function PATCH(req: NextRequest) {
     include: { patient: true, doctor: true },
   });
 
-  // If cancelled, delete the appointment and free the slot
-  if (status === "cancelled") {
-    await prisma.appointment.delete({ where: { id: appointment_id } });
+  // If cancelled, unlink the slot and free it
+  if (status === "cancelled" && appointment.slotId) {
+    await prisma.appointment.update({
+      where: { id: appointment_id },
+      data: { slotId: null },
+    });
     await prisma.slot.update({
       where: { id: appointment.slotId },
       data: { isBooked: false },

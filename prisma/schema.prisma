@@ -46,7 +46,7 @@ model Appointment {
   id        String   @id @default(cuid())
   patientId String
   doctorId  String
-  slotId    String   @unique
+  slotId    String?  @unique
   date      String
   startTime String
   endTime   String
@@ -57,7 +57,7 @@ model Appointment {
 
   patient  Patient   @relation(fields: [patientId], references: [id])
   doctor   Doctor    @relation(fields: [doctorId], references: [id])
-  slot     Slot      @relation(fields: [slotId], references: [id])
+  slot     Slot?     @relation(fields: [slotId], references: [id])
   callLogs CallLog[]
 }
 
