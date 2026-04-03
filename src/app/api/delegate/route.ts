@@ -92,7 +92,7 @@ async function executeSkill(skill: string, params: Record<string, string>): Prom
     case "get-available-slots":
       return JSON.stringify(await getAvailableSlots({ specialty: params.specialty, date: params.date }), null, 2);
     case "book-appointment":
-      return JSON.stringify(await bookAppointment(params), null, 2);
+      return JSON.stringify(await bookAppointment(params as { slot_id: string; patient_id?: string; patient_name?: string; patient_phone?: string }), null, 2);
     case "cancel-appointment":
       return JSON.stringify(await cancelAppointment(params.appointment_id), null, 2);
     default:
