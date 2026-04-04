@@ -11,7 +11,7 @@ Returns patient name, ID, and list of upcoming appointments with doctor details.
 ## Example
 
 ```sh
-curl -s "http://localhost:3000/api/skills/get-patient-info?phone=%2B919876543210"
+get-patient-info --phone +919876543210
 ```
 
 ```json
@@ -37,3 +37,16 @@ If not found:
 ```json
 { "found": false }
 ```
+
+## How to respond
+
+After getting patient info, personalize your response. Use patient_id for booking and appointment_id for cancellation. NEVER say IDs aloud.
+
+Patient found with appointments:
+"Hi Kush! I can see you have an appointment with Dr. Rajesh Sharma on April 4th at 9 AM."
+
+Patient found, no appointments:
+"Hi Kush! You don't have any upcoming appointments. Would you like to book one?"
+
+Patient not found:
+"I couldn't find an account with that phone number. Could you please provide your name so I can set one up?"

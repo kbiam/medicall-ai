@@ -11,16 +11,24 @@ import {
 
 const anthropic = new Anthropic();
 
-// Load skill definitions from markdown files
-function loadSkills(): string {
-  const skillsDir = path.join(process.cwd(), "skills");
+const skillsDir = path.join(process.cwd(), "skills");
+
+// Load just name + first line description for system prompt
+function loadSkillIndex(): string {
   const files = fs.readdirSync(skillsDir).filter((f) => f.endsWith(".md"));
   return files
-    .map((f) => fs.readFileSync(path.join(skillsDir, f), "utf-8"))
-    .join("\n---\n");
+    .map((f) => {
+      const content = fs.readFileSync(path.join(skillsDir, f), "utf-8");
+      const name = f.replace(".md", "");
+      // First non-empty line after the # heading is the description
+      const lines = content.split("\n").filter((l) => l.trim());
+      const description = lines[1] || "";
+      return `- **${name}**: ${description}`;
+    })
+    .join("\n");
 }
 
-const SKILLS_DOCS = loadSkills();
+const SKILL_INDEX = loadSkillIndex();
 
 const SYSTEM_PROMPT = `You are a healthcare scheduling backend agent for MediCall Healthcare.
 
@@ -29,29 +37,71 @@ Available doctors:
 - Dr. Rajesh Sharma (Cardiology)
 - Dr. Anita Gupta (Dermatology)
 
-You have these skills available. Each skill shows its API contract with example curl commands. To execute a skill, use the bash tool with a command like the examples — but instead of curl, write it as a simple command string that maps to the skill.
+You have these skills available:
 
-${SKILLS_DOCS}
+${SKILL_INDEX}
 
----
+You have two tools:
+1. **read_skill** — Read the full documentation for a skill before using it. Always read a skill's doc first if you haven't already in this conversation.
+2. **bash** — Execute a skill command after reading its docs.
 
-To execute a skill, use the bash tool with this format:
-  get-patient-info --phone +919876543210
-  get-available-slots --specialty Cardiology --date 2026-04-04
-  book-appointment --slot_id abc123 --patient_id xyz456
-  book-appointment --slot_id abc123 --patient_phone +919876543210 --patient_name "John Doe"
-  cancel-appointment --appointment_id abc123
+Workflow:
+1. If caller_phone is provided, read the get-patient-info skill, then execute it.
+2. Read the relevant skill doc for what the patient needs.
+3. Execute the skill using the bash tool.
+4. Repeat as needed. When you have enough info, respond with plain text.
 
-Instructions:
-1. If caller_phone is provided, ALWAYS look up the patient first.
-2. Execute skills as needed, read the results, decide next steps.
-3. When you have enough info, respond with plain text (no tool calls).
-4. Format for speech — "April 4th" not "2026-04-04", "9:30 AM" not "09:30".
-5. Never include internal IDs in your final response.
-6. Max 3-4 slot options when listing availability.
-7. Keep final response concise — read aloud on a phone call.`;
+Rules:
+- Always read a skill doc before executing it for the first time.
+- Format for speech — "April 4th" not "2026-04-04", "9:30 AM" not "09:30".
+- Never include internal IDs in your final response.
+- Max 3-4 slot options when listing availability.
+- Keep final response concise — it will be read aloud on a phone call.`;
 
-function parseSkillCommand(command: string): { skill: string; params: Record<string, string> } | null {
+const tools: Anthropic.Tool[] = [
+  {
+    name: "read_skill",
+    description:
+      "Read the full documentation for a skill. Call this before using a skill for the first time to understand its inputs, outputs, command format, and how to respond.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        skill_name: {
+          type: "string",
+          description:
+            "The skill name to read: get-patient-info, get-available-slots, book-appointment, or cancel-appointment",
+        },
+      },
+      required: ["skill_name"],
+    },
+  },
+  {
+    name: "bash",
+    description: "Execute a skill command. Format: skill-name --param value",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        command: {
+          type: "string",
+          description: "The skill command to execute",
+        },
+      },
+      required: ["command"],
+    },
+  },
+];
+
+function readSkillDoc(skillName: string): string {
+  const filePath = path.join(skillsDir, `${skillName}.md`);
+  if (!fs.existsSync(filePath)) {
+    return `Skill "${skillName}" not found. Available: get-patient-info, get-available-slots, book-appointment, cancel-appointment`;
+  }
+  return fs.readFileSync(filePath, "utf-8");
+}
+
+function parseSkillCommand(
+  command: string
+): { skill: string; params: Record<string, string> } | null {
   const parts = command.trim().split(/\s+/);
   const skill = parts[0];
   const params: Record<string, string> = {};
@@ -60,11 +110,9 @@ function parseSkillCommand(command: string): { skill: string; params: Record<str
   while (i < parts.length) {
     if (parts[i].startsWith("--")) {
       const key = parts[i].slice(2);
-      // Collect value — might be quoted
       let value = "";
       i++;
       if (i < parts.length && parts[i].startsWith('"')) {
-        // Quoted value
         value = parts[i].slice(1);
         i++;
         while (i < parts.length && !value.endsWith('"')) {
@@ -85,32 +133,45 @@ function parseSkillCommand(command: string): { skill: string; params: Record<str
   return skill ? { skill, params } : null;
 }
 
-async function executeSkill(skill: string, params: Record<string, string>): Promise<string> {
+async function executeSkill(
+  skill: string,
+  params: Record<string, string>
+): Promise<string> {
   switch (skill) {
     case "get-patient-info":
       return JSON.stringify(await getPatientInfo(params.phone), null, 2);
     case "get-available-slots":
-      return JSON.stringify(await getAvailableSlots({ specialty: params.specialty, date: params.date }), null, 2);
+      return JSON.stringify(
+        await getAvailableSlots({
+          specialty: params.specialty,
+          date: params.date,
+        }),
+        null,
+        2
+      );
     case "book-appointment":
-      return JSON.stringify(await bookAppointment(params as { slot_id: string; patient_id?: string; patient_name?: string; patient_phone?: string }), null, 2);
+      return JSON.stringify(
+        await bookAppointment(
+          params as {
+            slot_id: string;
+            patient_id?: string;
+            patient_name?: string;
+            patient_phone?: string;
+          }
+        ),
+        null,
+        2
+      );
     case "cancel-appointment":
-      return JSON.stringify(await cancelAppointment(params.appointment_id), null, 2);
+      return JSON.stringify(
+        await cancelAppointment(params.appointment_id),
+        null,
+        2
+      );
     default:
       return JSON.stringify({ error: `Unknown skill: ${skill}` });
   }
 }
-
-const bashTool: Anthropic.Tool = {
-  name: "bash",
-  description: "Execute a skill command. Format: skill-name --param value",
-  input_schema: {
-    type: "object" as const,
-    properties: {
-      command: { type: "string", description: "The skill command to execute" },
-    },
-    required: ["command"],
-  },
-};
 
 export async function POST(req: NextRequest) {
   const body = await req.json();
@@ -125,12 +186,12 @@ export async function POST(req: NextRequest) {
   ];
 
   // Agent loop
-  for (let i = 0; i < 8; i++) {
+  for (let i = 0; i < 10; i++) {
     const response = await anthropic.messages.create({
       model: "claude-sonnet-4-6",
       max_tokens: 1024,
       system: SYSTEM_PROMPT,
-      tools: [bashTool],
+      tools,
       messages,
     });
 
@@ -141,18 +202,24 @@ export async function POST(req: NextRequest) {
 
       const toolResults: Anthropic.ToolResultBlockParam[] = [];
       for (const toolUse of toolUseBlocks) {
-        const input = toolUse.input as { command: string };
-        console.log(`[Delegate] Command: ${input.command}`);
-
-        const parsed = parseSkillCommand(input.command);
         let output: string;
-        if (parsed) {
-          output = await executeSkill(parsed.skill, parsed.params);
-        } else {
-          output = JSON.stringify({ error: "Could not parse command" });
-        }
-        console.log(`[Delegate] Output: ${output.slice(0, 300)}`);
 
+        if (toolUse.name === "read_skill") {
+          const input = toolUse.input as { skill_name: string };
+          console.log(`[Delegate] Read skill: ${input.skill_name}`);
+          output = readSkillDoc(input.skill_name);
+        } else {
+          const input = toolUse.input as { command: string };
+          console.log(`[Delegate] Command: ${input.command}`);
+          const parsed = parseSkillCommand(input.command);
+          if (parsed) {
+            output = await executeSkill(parsed.skill, parsed.params);
+          } else {
+            output = JSON.stringify({ error: "Could not parse command" });
+          }
+        }
+
+        console.log(`[Delegate] Output: ${output.slice(0, 300)}`);
         toolResults.push({
           type: "tool_result",
           tool_use_id: toolUse.id,
@@ -167,7 +234,10 @@ export async function POST(req: NextRequest) {
 
     // Final text response
     const textBlock = response.content.find((b) => b.type === "text");
-    const text = textBlock && "text" in textBlock ? textBlock.text : "Sorry, I could not process that request.";
+    const text =
+      textBlock && "text" in textBlock
+        ? textBlock.text
+        : "Sorry, I could not process that request.";
 
     console.log("[Delegate] Final response:", text);
     return NextResponse.json({ response: text });
