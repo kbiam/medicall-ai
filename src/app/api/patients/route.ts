@@ -30,3 +30,17 @@ export async function POST(req: NextRequest) {
 
   return NextResponse.json(patient, { status: 201 });
 }
+
+export async function DELETE(req: NextRequest) {
+  const id = req.nextUrl.searchParams.get("id");
+  if (!id) {
+    return NextResponse.json({ error: "id required" }, { status: 400 });
+  }
+
+  // Delete related records first
+  await prisma.callLog.deleteMany({ where: { patientId: id } });
+  await prisma.appointment.deleteMany({ where: { patientId: id } });
+  await prisma.patient.delete({ where: { id } });
+
+  return NextResponse.json({ success: true });
+}

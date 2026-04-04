@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Plus, Phone, X } from "lucide-react";
+import { Plus, Phone, X, Trash2 } from "lucide-react";
 
 interface Patient {
   id: string;
@@ -66,6 +66,12 @@ export default function PatientsPage() {
     setCallLoading(null);
   }
 
+  async function deletePatient(patient: Patient) {
+    if (!confirm(`Delete ${patient.name}? This will also delete their appointments and call logs.`)) return;
+    await fetch(`/api/patients?id=${patient.id}`, { method: "DELETE" });
+    fetchPatients();
+  }
+
   if (loading) {
     return <div className="flex items-center justify-center h-64"><p className="text-gray-500">Loading...</p></div>;
   }
@@ -117,6 +123,13 @@ export default function PatientsPage() {
               >
                 <Phone className="h-3.5 w-3.5" />
                 {callLoading === patient.id ? "Calling..." : "Schedule via Call"}
+              </button>
+              <button
+                onClick={() => deletePatient(patient)}
+                className="flex items-center gap-1.5 text-sm bg-red-50 text-red-700 px-3 py-1.5 rounded-lg hover:bg-red-100"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                Delete
               </button>
             </div>
           </div>
