@@ -30,6 +30,13 @@ export function Sidebar() {
             <p className="text-xs text-gray-500">Voice-Powered Scheduling</p>
           </div>
         </div>
+        <div className="mt-3 flex items-center gap-2 px-2 py-1.5 bg-blue-50 rounded-lg">
+          <Phone className="h-3.5 w-3.5 text-blue-600 flex-shrink-0" />
+          <div>
+            <p className="text-[10px] text-blue-500">Call to test</p>
+            <p className="text-xs font-medium text-blue-700">+1 (269) 586-9183</p>
+          </div>
+        </div>
       </div>
       <nav className="flex-1 p-4 space-y-1">
         {navItems.map((item) => {
